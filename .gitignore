@@ -1,0 +1,32 @@
+# Virtual environment
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Python package build artifacts
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# macOS system files (since you're on a Mac)
+.DS_Store
+
+# Ignore dataset files but preserve folder structure
+datasets_thermoelectric/*.xlsx
+datasets_thermoelectric/*.csv
+datasets_merged/*
+!datasets_merged/.gitkeep
+!datasets_thermoelectric/README.md
+!datasets_merged/README.md
+
+# Documentation/walkthrough media files (fully ignored)
+eia_website_walkthrough/
+*.mov
+*.mp4
