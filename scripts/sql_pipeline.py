@@ -8,6 +8,7 @@ Functions
 ---------
 schema_preview(df)
     Print schema overview + detect missingness representations.
+    Returns per-column missingness breakdown (raw counts).
 sql_prep_columns(df, date_cols=None, replace_missing_values=None, ...)
     Clean column names + handle missingness + optional date creation + save CSV.
 dtype_audit(df, print_results=True)
@@ -34,11 +35,31 @@ DATASETS_OUTPUT.mkdir(exist_ok=True)
 # ======================================================
 
 
-def schema_preview(df: pd.DataFrame):
+def schema_preview(
+    df: pd.DataFrame,
+    save: bool = True,
+    output_name: str = 'schema_missingness_audit'
+) -> pd.DataFrame:
     """
     Print a human-friendly schema overview for a merged DataFrame:
     - Columns + dtype
-    - Global missingness representations (NaN, blanks, 'NA', '.', etc.)
+    - Returns per-column missingness breakdown (raw counts)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame to audit
+    save : bool, default True
+        Whether to save the missingness audit to CSV
+    output_name : str, default 'schema_missingness_audit'
+        Base name for the saved CSV file
+
+    Returns
+    -------
+    pd.DataFrame
+        Per-column missingness counts with columns:
+        - dtype, total_rows, null_nan, empty_whitespace
+        - Additional columns for any detected placeholders
     """
     print("🧬 Full Column Schema (name → dtype):\n")
     schema_df = df.dtypes.rename("dtype").to_frame()
@@ -46,21 +67,39 @@ def schema_preview(df: pd.DataFrame):
         print(schema_df.to_string())
     print()
 
-    # Detect missingness representations (global)
+    # Per-column missingness breakdown (raw counts)
     placeholders = ['NA', 'N/A', 'na', 'N/a', '-', '.']
-    missing_repr = {}
-    missing_repr['NaN/None'] = df.isnull().any().any()
-    missing_repr['Empty string / whitespace'] = (
-        df.astype(str).apply(lambda col: col.str.strip() == '').any().any()
-    )
-    for val in placeholders:
-        missing_repr[val] = (df == val).any().any()
+    records = []
+    for col in df.columns:
+        series = df[col]
+        record = {
+            'column': col,
+            'dtype': str(series.dtype),
+            'total_rows': len(series),
+            'null_nan': int(series.isnull().sum()),
+            'empty_whitespace': int((series.astype(str).str.strip() == '').sum()),
+        }
+        # Count each placeholder (only if present in this column)
+        for ph in placeholders:
+            count = int((series == ph).sum())
+            if count > 0:
+                record[f'"{ph}"'] = count
 
-    print("🔎 Detected missingness representations in dataset:")
-    for rep, present in missing_repr.items():
-        if present:
-            print(f"   • {rep}")
-    print()
+        records.append(record)
+
+    missingness_df = pd.DataFrame(records).set_index('column')
+
+    # Set display to show all rows in Jupyter
+    pd.set_option('display.max_rows', None)
+
+    # Optionally save to datasets_merged (pre-cleaned audit)
+    if save:
+        timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+        output_file = DATASETS_OUTPUT / f"{output_name}_{timestamp}.csv"
+        missingness_df.to_csv(output_file)
+        print(f"💾 Missingness audit saved to: {output_file}\n")
+
+    return missingness_df
 
 
 # ======================================================
@@ -71,8 +110,7 @@ def schema_preview(df: pd.DataFrame):
 def sql_prep_columns(
     df: pd.DataFrame,
     date_cols: Optional[Dict[str, tuple]] = None,
-    replace_missing_values: Optional[List[str]] = None,
-    missing_marker: str = 'null_rec',
+    recode_values: Optional[Dict[str, str]] = None,
     save: bool = False,
     output_name: str = 'sql_ready'
 ) -> pd.DataFrame:
@@ -80,8 +118,9 @@ def sql_prep_columns(
     Prepare a DataFrame for SQL insertion:
     - Clean column names (lowercase, underscores, remove special chars)
     - Move any leading numbers in column names to the end
-    - Convert blanks/empty strings to NaN
-    - Optionally replace dataset-specific missingness representations with a marker
+    - Convert empty strings/whitespace to 'not_reported' (preserves distinction from NaN)
+    - NaN values stay as NaN (become NULL in SQL)
+    - Optionally recode dataset-specific values (e.g., '.', '-') to meaningful strings
     - Optionally combine year/month columns into a single date column
     - Optionally save to CSV
     - Auto-prints final column names
@@ -93,11 +132,9 @@ def sql_prep_columns(
     date_cols : dict, optional
         Mapping for date creation: {'new_date_col': ('year_col', 'month_col')}
         Example: {'date': ('year', 'month')}
-    replace_missing_values : list, optional
-        List of values in the dataset to treat as missing and replace with missing_marker
-        Example: ['NA', 'N/A', 'na', 'N/a', '-', '.']
-    missing_marker : str, default 'null_rec'
-        Value to use when replacing dataset-specific missingness
+    recode_values : dict, optional
+        Mapping of original values to new values for coded missingness
+        Example: {'.': 'suppressed', '-': 'zero_or_na'}
     save : bool, default False
         Whether to save the cleaned DataFrame to CSV
     output_name : str, default 'sql_ready'
@@ -107,12 +144,16 @@ def sql_prep_columns(
     -------
     pd.DataFrame
         Cleaned DataFrame ready for SQL insertion
+        - Empty strings → 'not_reported'
+        - NaN → NULL in SQL
+        - Coded values (e.g., '.', '-') → as-is, or remapped via recode_values
     """
-    # 0️⃣ Handle missingness (FutureWarning-safe)
-    df = df.replace(r'^\s*$', np.nan, regex=True).infer_objects(copy=False)
+    # 0️⃣ Handle missingness: empty → 'not_reported', NaN stays as NaN (→ NULL in SQL)
+    df = df.replace(r'^\s*$', 'not_reported', regex=True).infer_objects(copy=False)
 
-    if replace_missing_values:
-        df = df.replace(replace_missing_values, missing_marker).infer_objects(copy=False)
+    # Optionally recode dataset-specific coded values
+    if recode_values:
+        df = df.replace(recode_values).infer_objects(copy=False)
 
     # 1️⃣ Clean column names
     def clean_col(col: str) -> str:
@@ -171,54 +212,150 @@ def sql_prep_columns(
 
 
 # ======================================================
-# 📥 Phase 4: SQL prep - dtypes (FutureWarning-safe)
+# 📥 Phase 4: SQL prep - dtypes
 # ======================================================
 
 
-def dtype_audit(df: pd.DataFrame, print_results: bool = True) -> pd.DataFrame:
+def dtype_audit(df: pd.DataFrame, ignore_values: Optional[List[str]] = None) -> pd.DataFrame:
     """
-    Inspect inferred vs coercible dtypes without mutating data.
-    Adds context with missing/empty percentage.
+    Inspect inferred vs coercible dtypes to guide SQL type mapping.
+    Suggests dtype based on actual data values, ignoring missingness markers.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame to audit
+    ignore_values : list, optional
+        Values to ignore when suggesting dtype. Default: ['not_reported']
 
     Returns a DataFrame with:
     - column
-    - inferred_dtype
-    - percent parseable as numeric
-    - percent parseable as datetime
-    - percent missing/NaN
+    - inferred_dtype (pandas' current dtype)
+    - suggested_dtype (what it should be, ignoring markers)
+    - numeric_parseable_%
     """
+    if ignore_values is None:
+        ignore_values = ['not_reported']
+
     records = []
 
     for col in df.columns:
         series = df[col]
         inferred = str(series.dtype)
 
-        # Missing/NaN ratio
-        missing_ratio = series.isna().mean()
+        # Filter out ignored values for analysis
+        filtered = series[~series.isin(ignore_values) & series.notna()]
 
-        # Try numeric coercion safely
-        coerced_numeric = pd.to_numeric(series, errors="coerce")
-        numeric_ratio = coerced_numeric.notna().mean()
+        # Try numeric coercion on filtered data
+        coerced_numeric = pd.to_numeric(filtered, errors="coerce")
+        numeric_ratio = coerced_numeric.notna().mean() if len(filtered) > 0 else 0
 
-        # Try datetime coercion safely
-        coerced_datetime = pd.to_datetime(series, errors="coerce")
-        datetime_ratio = coerced_datetime.notna().mean()
+        # Keywords that indicate a column should be FLOAT (measurements/metrics)
+        float_keywords = ['_mwh', '_mw', '_mmbtu', '_gallons', '_rate', '_volume', '_capacity', '_intensity']
+
+        # Suggest dtype based on filtered values
+        if len(filtered) == 0:
+            suggested = "TEXT"  # all missing/ignored
+        elif numeric_ratio >= 0.99:
+            # Force FLOAT for measurement columns, even if data is whole numbers
+            col_lower = col.lower()
+            if any(kw in col_lower for kw in float_keywords):
+                suggested = "FLOAT"
+            elif (coerced_numeric.dropna() % 1 == 0).all():
+                suggested = "INTEGER"
+            else:
+                suggested = "FLOAT"
+        else:
+            suggested = "TEXT"
 
         records.append({
             "column": col,
             "inferred_dtype": inferred,
+            "suggested_dtype": suggested,
             "numeric_parseable_%": round(numeric_ratio * 100, 2),
-            "datetime_parseable_%": round(datetime_ratio * 100, 2),
-            "missing_%": round(missing_ratio * 100, 2)
         })
 
     audit_df = pd.DataFrame(records)
-    if print_results:
-        print("\n🔍 DTYPE AUDIT RESULTS:")
-        with pd.option_context("display.max_rows", None, "display.max_colwidth", None):
-            print(audit_df.to_string(index=False))
-        print()
+
+    # Set display to show all rows when returned in Jupyter
+    pd.set_option('display.max_rows', None)
+
     return audit_df
+
+
+# ======================================================
+# 📥 Phase 5: Apply suggested dtypes
+# ======================================================
+
+
+def apply_sql_dtypes(
+    df: pd.DataFrame,
+    audit_df: pd.DataFrame,
+    marker_to_null: str = 'not_reported'
+) -> pd.DataFrame:
+    """
+    Apply suggested dtypes from dtype_audit to the DataFrame.
+    Converts 'not_reported' markers to proper nulls for numeric columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame to convert
+    audit_df : pd.DataFrame
+        Output from dtype_audit() with 'column' and 'suggested_dtype' columns
+    marker_to_null : str, default 'not_reported'
+        String marker to convert to null before type conversion
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with SQL-friendly dtypes:
+        - INTEGER → pandas Int64 (nullable)
+        - FLOAT → pandas Float64 (nullable)
+        - TEXT → string
+    """
+    df = df.copy()
+
+    # Build mapping from audit
+    dtype_map = dict(zip(audit_df['column'], audit_df['suggested_dtype']))
+
+    converted = []
+    failed = []
+
+    for col in df.columns:
+        if col not in dtype_map:
+            continue
+
+        suggested = dtype_map[col]
+
+        try:
+            if suggested == 'INTEGER':
+                # Replace marker with NA, then convert to nullable integer
+                df[col] = df[col].replace(marker_to_null, pd.NA)
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
+                converted.append((col, 'Int64'))
+
+            elif suggested == 'FLOAT':
+                # Replace marker with NA, then convert to nullable float
+                df[col] = df[col].replace(marker_to_null, pd.NA)
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype('Float64')
+                converted.append((col, 'Float64'))
+
+            elif suggested == 'TEXT':
+                # Keep as string, preserve marker
+                df[col] = df[col].astype('string')
+                converted.append((col, 'string'))
+
+        except Exception as e:
+            failed.append((col, str(e)))
+
+    print(f"✅ Converted {len(converted)} columns")
+    if failed:
+        print(f"⚠️  Failed to convert {len(failed)} columns:")
+        for col, err in failed:
+            print(f"   • {col}: {err}")
+
+    return df
 
 
 # ======================================================
