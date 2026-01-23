@@ -38,3 +38,5 @@ visualizations/
 # Personal notebooks (sidenotes, experiments)
 *_sidenotes.ipynb
 deprec*.ipynb
+curr_*.ipynb
+EIA_WaterStew*.ipynb
