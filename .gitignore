@@ -30,3 +30,11 @@ datasets_merged/*
 eia_website_walkthrough/
 *.mov
 *.mp4
+
+# Data exports and visualizations (generated outputs)
+data_exports/
+visualizations/
+
+# Personal notebooks (sidenotes, experiments)
+*_sidenotes.ipynb
+deprec*.ipynb
