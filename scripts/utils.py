@@ -12,6 +12,8 @@ coverage_summary(df)
     Return DataFrame with missing count + percentage per column.
 column_profile(df)
     Generate numerical stats + categorical summary (unique count, mode).
+compare_distributions(df_a, df_b, column, label_a, label_b)
+    Compare normalised value distributions between two subsets.
 coverage_heatmap(df, filename, folder)
     Display coverage heatmap, auto-saves by default.
 """
@@ -167,6 +169,51 @@ def column_profile(df: pd.DataFrame) -> tuple:
 
 
 # ======================================================
+# Compare distributions between two subsets
+# ======================================================
+
+def compare_distributions(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    column: str,
+    label_a: str = "group_a",
+    label_b: str = "group_b"
+) -> pd.DataFrame:
+    """
+    Compare normalised value distributions for a column across two subsets.
+
+    Parameters
+    ----------
+    df_a : pd.DataFrame
+        First subset (e.g. rows of interest).
+    df_b : pd.DataFrame
+        Second subset (e.g. all other rows or full dataset).
+    column : str
+        Column name to compare.
+    label_a : str, default "group_a"
+        Label for df_a in output columns.
+    label_b : str, default "group_b"
+        Label for df_b in output columns.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns: {label_a}_pct, {label_b}_pct, diff.
+        Positive diff means over-represented in df_a relative to df_b.
+    """
+    dist_a = df_a[column].value_counts(dropna=False, normalize=True).mul(100).round(1)
+    dist_b = df_b[column].value_counts(dropna=False, normalize=True).mul(100).round(1)
+
+    comparison = pd.DataFrame({
+        f'{label_a}_pct': dist_a,
+        f'{label_b}_pct': dist_b
+    }).fillna(0)
+    comparison['diff'] = (comparison[f'{label_a}_pct'] - comparison[f'{label_b}_pct']).round(1)
+
+    return comparison
+
+
+# ======================================================
 # Coverage heatmap
 # ======================================================
 
@@ -258,6 +305,7 @@ if __name__ == "__main__":
     print("  save_df(df, filename, folder)")
     print("  coverage_summary(df)")
     print("  column_profile(df)  # returns (numerical_df, categorical_df)")
+    print("  compare_distributions(df_a, df_b, column, label_a, label_b)")
     print("  coverage_heatmap(df, filename, folder)  # auto-saves by default")
     print(f"\nDefault folders:")
     print(f"  Plots: {FALLBACK_PLOTS_FOLDER}")

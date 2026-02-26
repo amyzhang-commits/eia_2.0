@@ -159,5 +159,7 @@ Located in `scripts/`.
 - `coverage_summary(df)` — Return DataFrame with missing count and percentage per
   column.
 - `column_profile(df)` — Generate numerical stats and categorical summary.
+- `compare_distributions(df_a, df_b, column, label_a, label_b)` — Compare
+  normalised value distributions between two subsets; returns % breakdown and diff.
 - `coverage_heatmap(df, filename, folder)` — Display coverage heatmap, auto-saves
   by default.
