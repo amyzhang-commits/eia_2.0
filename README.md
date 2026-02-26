@@ -48,7 +48,29 @@ reusable helper modules.
 
 ## Setup & Installation
 
-*Forthcoming.*
+**Requirements:** Python 3.9+
+
+```bash
+# Clone the repository
+git clone https://github.com/amyzhang-commits/eia_2.0.git
+cd eia_2.0
+
+# Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install dependencies and helper modules
+pip install -e .
+```
+
+**Data:** Download the annual thermoelectric cooling Excel files (2014–2024) from
+[EIA](https://www.eia.gov/electricity/data/water/) and place them in
+`datasets_thermoelectric/`.
+
+**Run notebooks in order:**
+1. `01_data_ingestion.ipynb` — merges raw files, exports to `datasets_merged/`
+2. `02_profile_analysis.ipynb` — confirms grain, melts schema
+3. `03_forensic_clean_for_analysis.ipynb` — produces `analysis_ready_df.csv`
 
 ## Notebooks
 
@@ -81,10 +103,16 @@ features, making removal low-risk. All neither-metric rows are removed: investig
 surfaces these as structurally expected absences — dry-cooled or non-Schedule-8
 plants rather than missing data.
 
-### `decision_appendix.ipynb`
-A working research trail documenting the investigative process behind key analytical
-decisions: exploratory hypotheses, domain research, AI-assisted reasoning, and
-analyses that informed but did not make it into the main notebooks.
+### `02_decision_appendix.ipynb`
+Working research trail for `02_profile_analysis`: exploratory hypotheses, domain
+questions, intermediate findings, and AI-assisted reasoning that informed but did
+not make it into the main notebook.
+
+### `03_decision_appendix.ipynb`
+Working research trail for `03_forensic_clean_for_analysis`: detailed plant-level
+investigations, hypothesis testing (including SCD Type 2 and sector/fuel-based
+missingness), domain research, and the full analytical process behind each cleaning
+decision.
 
 ## Helper Modules
 

@@ -31,9 +31,11 @@ eia_website_walkthrough/
 *.mov
 *.mp4
 
-# Data exports and visualizations (generated outputs)
+# Data exports (generated outputs)
 data_exports/
-visualizations/
+
+# Experimental/deprecated notebooks
+trial_error/
 
 # Personal notebooks (sidenotes, experiments)
 *_sidenotes.ipynb
