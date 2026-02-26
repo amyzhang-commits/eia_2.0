@@ -44,7 +44,27 @@ reusable helper modules.
 
 ## Project Structure
 
-*Forthcoming.*
+```
+eia_2.0/
+├── notebooks/
+│   ├── 01_data_ingestion.ipynb
+│   ├── 02_profile_analysis.ipynb
+│   ├── 02_decision_appendix.ipynb
+│   ├── 03_forensic_clean_for_analysis.ipynb
+│   ├── 03_decision_appendix.ipynb
+│   └── decision_appendix.ipynb
+├── scripts/
+│   ├── dataset_pipeline.py
+│   ├── sql_pipeline.py
+│   ├── utils.py
+│   └── _deprecated/
+├── visualizations/
+├── datasets_thermoelectric/   # raw EIA Excel files (not tracked)
+├── datasets_merged/           # merged output (not tracked)
+├── data_exports/              # analysis outputs (not tracked)
+├── pyproject.toml
+└── README.md
+```
 
 ## Setup & Installation
 
